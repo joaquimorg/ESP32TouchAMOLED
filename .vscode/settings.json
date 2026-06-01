@@ -1,0 +1,21 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "idf.extensionActivationMode": "always",
+  "idf.openOcdConfigs": [
+    "board/esp32s3-builtin.cfg"
+  ],
+  "idf.portWin": "COM5",
+  "idf.currentSetup": "D:\\Tools\\.espressif\\v5.5.4\\esp-idf",
+  "idf.customExtraVars": {
+    "OPENOCD_SCRIPTS": "D:\\Tools\\esp-idf\\.espressif\\tools\\openocd-esp32\\v0.11.0-esp32-20220411/openocd-esp32/share/openocd/scripts",
+    "IDF_CCACHE_ENABLE": "1",
+    "IDF_TARGET": "esp32s3"
+  },
+  "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-20.1.1_20250829\\esp-clang\\bin\\clangd.exe",
+  "clangd.arguments": [
+    "--background-index",
+    "--query-driver=**",
+    "--compile-commands-dir=d:\\Work\\ESP32-S3-Touch-AMOLED\\S3TouchDeskCompanion\\ESP32TouchAMOLED\\build"
+  ],
+  "idf.flashType": "UART"
+}

@@ -1,0 +1,14 @@
+# BLE (todas as plataformas)
+bleak>=0.22
+
+# Processamento do ícone (todas as plataformas)
+Pillow>=10.0
+
+# Notificações do Windows (PyWinRT) — só Windows.
+# NOTA: requer Python com wheels PyWinRT disponíveis (3.9–3.13).
+winrt-runtime>=2.0 ; sys_platform == "win32"
+winrt-Windows.Foundation>=2.0 ; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=2.0 ; sys_platform == "win32"
+winrt-Windows.ApplicationModel>=2.0 ; sys_platform == "win32"
+winrt-Windows.UI.Notifications>=2.0 ; sys_platform == "win32"
+winrt-Windows.UI.Notifications.Management>=2.0 ; sys_platform == "win32"
