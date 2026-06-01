@@ -90,6 +90,14 @@ python desk_companion.py forget
 - Fica a escutar as notificações do Windows e envia cada nova para o dispositivo.
 - Se a ligação cair, tenta religar **a cada 30 s** até voltar (configurável com
   `--retry`). Tamanho do ícone com `--icon-size` (px, máx. 96).
+- **Ícone da notificação** (por ordem de prioridade):
+  1. **Mapeado por nome** — se existir `icons/<app>.png` cujo *slug* apareça no
+     nome da app ou no título (ex.: `icons/Instagram.png`). Útil quando o Windows
+     dá sempre o mesmo logótipo (apps reais repetidas, ou tudo via Phone Link).
+     Ver [`icons/README.md`](icons/README.md).
+  2. **Logótipo do Windows** da app emissora.
+  3. **Ícone por omissão** `notification.png` (na pasta `pc_app/`).
+  - Todos são redimensionados para `--icon-size` e convertidos para RGB565.
 
 ### Opções globais
 
@@ -117,6 +125,8 @@ pc_app/
   win_notifications.py-> escuta de notificações do Windows + ícone (PyWinRT/Pillow)
   protocol.py         -> UUIDs, framing e helpers (partilhado)
   config.py           -> guarda/lê o dispositivo escolhido (device.json)
+  notification.png    -> ícone por omissão (notificações sem logótipo da app)
+  icons/              -> ícones por app (mapeados por nome); ver icons/README.md
   test_notify.py      -> teste end-to-end BLE/visual (sem Windows; gera o ícone)
   requirements.txt    -> dependências Python
   README.md           -> este ficheiro

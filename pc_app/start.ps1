@@ -46,7 +46,8 @@ function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 # 1) Garante o ambiente virtual.
 if (-not (Test-Path $VenvPython)) {
     Write-Step 'Ambiente virtual nao encontrado. A criar .venv ...'
-    $py = (Get-Command py -ErrorAction SilentlyContinue) ?? (Get-Command python -ErrorAction SilentlyContinue)
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if (-not $py) { $py = Get-Command python -ErrorAction SilentlyContinue }
     if (-not $py) {
         throw "Python nao encontrado no PATH. Instala o Python 3.10-3.13 e tenta de novo."
     }

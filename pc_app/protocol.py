@@ -5,6 +5,7 @@ main/main.c).
 """
 from __future__ import annotations
 
+import unicodedata
 from datetime import datetime, timezone
 
 # --- UUIDs do GATT ---------------------------------------------------------
@@ -39,6 +40,20 @@ def epoch_payload(dt: datetime | None = None) -> bytes:
     return local_epoch(dt).to_bytes(4, "little")
 
 
+def normalize_text(text: str) -> str:
+    """Normaliza o texto para o que o dispositivo consegue mostrar.
+
+    Aplica Unicode NFKC: dobra letras "estilizadas" (Mathematical Bold/Italic,
+    fullwidth, etc.) e dígitos circulados/estilizados para a forma ASCII/canónica
+    (ex.: '𝗙𝗮𝗹𝘁𝗮𝗺'->'Faltam', '𝟯'->'3') e compõe acentos ('a'+til->'ã').
+    Emoji e símbolos sem equivalente ficam como estão (o dispositivo desenha-os
+    se tiver glifo; senão ignora-os).
+    """
+    if not text:
+        return text
+    return unicodedata.normalize("NFKC", text)
+
+
 def _truncate_utf8(text: str, max_bytes: int) -> bytes:
     """Trunca a string a no máximo `max_bytes` sem partir caracteres multibyte."""
     return text.encode("utf-8")[:max_bytes].decode("utf-8", "ignore").encode("utf-8")
@@ -46,8 +61,8 @@ def _truncate_utf8(text: str, max_bytes: int) -> bytes:
 
 # --- Construtores de frames ------------------------------------------------
 def frame_text(title: str, body: str) -> bytes:
-    t = _truncate_utf8(title or "", TITLE_MAX)
-    b = _truncate_utf8(body or "", BODY_MAX)
+    t = _truncate_utf8(normalize_text(title or ""), TITLE_MAX)
+    b = _truncate_utf8(normalize_text(body or ""), BODY_MAX)
     return bytes([OP_TEXT]) + t + b"\x00" + b
 
 

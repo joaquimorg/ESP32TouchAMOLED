@@ -128,10 +128,13 @@ pc_app/                    -> SOFTWARE DO PC (cliente BLE Python), NÃO é firmw
   `fonts/fonts.h`). Ficheiros: `font_chakra_64` (HH:MM + contador, só `0-9:`),
   `font_chakra_sec_30` (segundos, `0-9`), `font_chakra_title_30` (título/boas-
   vindas), `font_chakra_body_24` (corpo), `font_chakra_18` (cabeçalho/bateria).
-  As fontes de texto incluem **acentos PT** (range `0x20-0x7F` + `0xA0-0xFF`).
-  - `sanitize_text()` (antes `sanitize_ascii`) agora **preserva** as letras Latin-1
-    acentuadas e só converte pontuação tipográfica (travessões/aspas/reticências)
-    e descarta o resto (emoji → `?`).
+  As fontes de texto incluem **acentos PT** (range `0x20-0x7F` + `0xA0-0xFF`) e um
+  conjunto de **símbolos monocromáticos** (setas, bullets, ★, ♥, €, ™, ≥, ✓…)
+  vindos da **DejaVu Sans** (merge no `lv_font_conv`; ver `fonts/fonts.h`).
+  - `sanitize_text()` (antes `sanitize_ascii`) **preserva** Latin-1 e as sequências
+    UTF-8 dos símbolos suportados; converte pontuação tipográfica
+    (travessões/aspas/reticências) para ASCII; o resto (emoji) é mantido em UTF-8
+    mas, sem glifo e com `LV_USE_FONT_PLACEHOLDER` desligado, não é desenhado.
   - **Montserrat desativadas** no `sdkconfig.defaults` (e no `sdkconfig` em cache).
     O `LV_FONT_DEFAULT` (fallback interno do LVGL, não usado na UI) aponta para a
     **UNSCII 8** e `LV_USE_FONT_COMPRESSED` está desligado (as Chakra são

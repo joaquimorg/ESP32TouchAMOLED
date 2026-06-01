@@ -62,7 +62,8 @@ static lv_obj_t *s_notif_screen;   /* painel de notificação por cima do ecrã 
 /* --- Conteúdo da notificação --- */
 static lv_obj_t *s_notif_card;     /* cartão central (filho de s_notif_screen) */
 static lv_obj_t *s_notif_header;   /* cabeçalho em maiúsculas espaçadas */
-static lv_obj_t *s_msg_icon_box;   /* "badge" do ícone: anel de acento + glow */
+static lv_obj_t *s_msg_row;        /* linha: coluna do ícone + coluna do título */
+static lv_obj_t *s_msg_icon_box;   /* coluna do ícone (glow subtil, sem borda) */
 static lv_obj_t *s_msg_icon;
 static lv_obj_t *s_msg_title;
 static lv_obj_t *s_msg_divider;
@@ -131,13 +132,14 @@ static void schedule_lvgl(lv_async_cb_t cb, void *user_data)
     bsp_display_unlock();
 }
 
-/* Limpa o texto recebido por BLE mantendo UTF-8 válido que as fontes cobrem:
- *  - ASCII (0x20-0x7F) passa intacto;
- *  - Latin-1 (U+00A0..U+00FF: acentos PT) é preservado — as fontes Chakra Petch
- *    foram geradas com este range;
- *  - pontuação tipográfica comum (travessões, aspas curvas, reticências) é
- *    convertida para o equivalente ASCII;
- *  - tudo o resto (emoji, etc.) vira '?'.
+/* Limpa o texto recebido por BLE preservando UTF-8 válido:
+ *  - ASCII (0x20-0x7F) e Latin-1 (acentos PT) passam intactos;
+ *  - pontuação tipográfica (U+2000..U+206F: travessões, aspas curvas,
+ *    reticências) é convertida para o equivalente ASCII (não há glifo);
+ *  - restantes sequências UTF-8 válidas (setas, bullets, €, ™, ≥, ★, ...) são
+ *    PRESERVADAS — aparecem se a fonte tiver o glifo; senão (ex.: emoji), com o
+ *    placeholder do LVGL desligado, simplesmente não são desenhadas;
+ *  - bytes inválidos são descartados.
  * Escreve sempre <= bytes lidos, por isso opera in-place em segurança. */
 static void sanitize_text(char *text)
 {
@@ -147,13 +149,6 @@ static void sanitize_text(char *text)
     while (*r) {
         uint8_t c = (uint8_t)*r;
         if (c < 0x80) {
-            *w++ = *r++;
-            continue;
-        }
-
-        /* Latin-1 em UTF-8 (0xC2/0xC3 + continuação): preserva. */
-        if ((c == 0xC2 || c == 0xC3) && ((uint8_t)r[1] & 0xC0) == 0x80) {
-            *w++ = *r++;
             *w++ = *r++;
             continue;
         }
@@ -177,10 +172,20 @@ static void sanitize_text(char *text)
             }
         }
 
-        /* Desconhecido -> '?'; salta a sequência UTF-8 sem passar do '\0'. */
-        *w++ = '?';
-        int step = (c & 0xE0) == 0xC0 ? 2 : ((c & 0xF0) == 0xE0 ? 3 : ((c & 0xF8) == 0xF0 ? 4 : 1));
-        for (int k = 0; k < step && *r; k++) {
+        /* Sequência UTF-8 válida (Latin-1, símbolos, etc.): preserva os bytes.
+         * Valida os bytes de continuação; se inválida, descarta 1 byte. */
+        int step = (c & 0xE0) == 0xC0 ? 2 : ((c & 0xF0) == 0xE0 ? 3 : ((c & 0xF8) == 0xF0 ? 4 : 0));
+        bool valid = (step >= 2);
+        for (int k = 1; valid && k < step; k++) {
+            if (((uint8_t)r[k] & 0xC0) != 0x80) {
+                valid = false;
+            }
+        }
+        if (valid) {
+            for (int k = 0; k < step; k++) {
+                *w++ = *r++;
+            }
+        } else {
             r++;
         }
     }
@@ -653,11 +658,21 @@ static void show_notification_ui(bool has_icon)
     lv_label_set_text(s_notif_header, has_title ? "NOTIFICAÇÃO" : "MENSAGEM");
     lv_label_set_text(s_msg_title, s_n_title);
     if (has_title) {
+        /* Com ícone: título à esquerda, ao lado do ícone. Sem ícone: centrado. */
+        lv_obj_set_style_text_align(s_msg_title,
+                                    has_icon ? LV_TEXT_ALIGN_LEFT : LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_remove_flag(s_msg_title, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_msg_divider, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(s_msg_title, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(s_msg_divider, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    /* A linha (ícone+título) só faz sentido se houver pelo menos um dos dois. */
+    if (has_icon || has_title) {
+        lv_obj_remove_flag(s_msg_row, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s_msg_row, LV_OBJ_FLAG_HIDDEN);
     }
 
     lv_label_set_text(s_msg_body, s_n_body);
@@ -928,19 +943,31 @@ static void create_ui(void)
     lv_obj_remove_flag(s_notif_card, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(s_notif_card, LV_OBJ_FLAG_CLICKABLE);
 
-    /* "Badge" do ícone: moldura/anel de acento com folga + glow subtil à volta.
-     * Ajusta-se ao tamanho do ícone (SIZE_CONTENT + padding). */
-    s_msg_icon_box = lv_obj_create(s_notif_card);
+    /* Linha do topo: coluna do ícone (esquerda) + coluna do título (direita,
+     * maior). O título alinha verticalmente ao centro do ícone. */
+    s_msg_row = lv_obj_create(s_notif_card);
+    lv_obj_set_width(s_msg_row, LV_PCT(100));
+    lv_obj_set_height(s_msg_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(s_msg_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(s_msg_row, 0, 0);
+    lv_obj_set_style_pad_all(s_msg_row, 0, 0);
+    lv_obj_set_style_pad_column(s_msg_row, 14, 0);
+    lv_obj_set_flex_flow(s_msg_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(s_msg_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scrollbar_mode(s_msg_row, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(s_msg_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_remove_flag(s_msg_row, LV_OBJ_FLAG_CLICKABLE);
+
+    /* Coluna 1 — ícone: sem borda, com um glow subtil à volta (toque tech). */
+    s_msg_icon_box = lv_obj_create(s_msg_row);
     lv_obj_set_size(s_msg_icon_box, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(s_msg_icon_box, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_pad_all(s_msg_icon_box, 6, 0);
-    lv_obj_set_style_radius(s_msg_icon_box, 22, 0);
-    lv_obj_set_style_border_color(s_msg_icon_box, lv_color_hex(CLR_ACCENT), 0);
-    lv_obj_set_style_border_width(s_msg_icon_box, 2, 0);
-    lv_obj_set_style_border_opa(s_msg_icon_box, LV_OPA_60, 0);
+    lv_obj_set_style_pad_all(s_msg_icon_box, 3, 0);
+    lv_obj_set_style_radius(s_msg_icon_box, 16, 0);
+    lv_obj_set_style_border_width(s_msg_icon_box, 0, 0);
     lv_obj_set_style_shadow_color(s_msg_icon_box, lv_color_hex(CLR_ACCENT), 0);
-    lv_obj_set_style_shadow_width(s_msg_icon_box, 18, 0);
-    lv_obj_set_style_shadow_spread(s_msg_icon_box, 1, 0);
+    lv_obj_set_style_shadow_width(s_msg_icon_box, 16, 0);
+    lv_obj_set_style_shadow_spread(s_msg_icon_box, 0, 0);
     lv_obj_set_style_shadow_opa(s_msg_icon_box, LV_OPA_40, 0);
     lv_obj_add_flag(s_msg_icon_box, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(s_msg_icon_box, LV_OBJ_FLAG_SCROLLABLE);
@@ -949,18 +976,17 @@ static void create_ui(void)
     s_msg_icon = lv_image_create(s_msg_icon_box);
     lv_obj_set_style_radius(s_msg_icon, 14, 0);
     lv_obj_set_style_clip_corner(s_msg_icon, true, 0);
-    lv_obj_set_style_border_color(s_msg_icon, lv_color_hex(CLR_HAIRLINE), 0);
-    lv_obj_set_style_border_width(s_msg_icon, 1, 0);
-    lv_obj_set_style_border_opa(s_msg_icon, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_msg_icon, 0, 0);
     lv_obj_remove_flag(s_msg_icon, LV_OBJ_FLAG_CLICKABLE);
 
-    s_msg_title = lv_label_create(s_notif_card);
+    /* Coluna 2 — título: ocupa o espaço restante (coluna maior). */
+    s_msg_title = lv_label_create(s_msg_row);
     lv_label_set_text(s_msg_title, "");
+    lv_obj_set_flex_grow(s_msg_title, 1);
     lv_obj_set_style_text_color(s_msg_title, lv_color_hex(CLR_TEXT), 0);
     lv_obj_set_style_text_font(s_msg_title, &font_chakra_title_30, 0);
-    lv_obj_set_style_text_align(s_msg_title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_align(s_msg_title, LV_TEXT_ALIGN_LEFT, 0);
     lv_label_set_long_mode(s_msg_title, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(s_msg_title, LV_PCT(100));
     lv_obj_remove_flag(s_msg_title, LV_OBJ_FLAG_CLICKABLE);
 
     s_msg_divider = lv_obj_create(s_notif_card);

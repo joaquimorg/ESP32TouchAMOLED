@@ -70,7 +70,7 @@ class DeskCompanionClient:
         await self._client.write_gatt_char(proto.UUID_TIME, proto.epoch_payload(dt), response=True)
 
     async def send_message(self, text: str):
-        data = text.encode("utf-8")[: proto.MSG_MAX_LEN]
+        data = proto.normalize_text(text or "").encode("utf-8")[: proto.MSG_MAX_LEN]
         await self._client.write_gatt_char(proto.UUID_MSG, data, response=True)
 
     async def clear(self):
